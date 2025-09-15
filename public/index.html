@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Excel AI Mock Interview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8">
+  <div class="max-w-2xl mx-auto bg-white p-6 rounded shadow">
+    <div id="start-screen">
+      <h1 class="text-2xl font-bold mb-4">Excel AI Mock Interview</h1>
+      <input id="name" type="text" placeholder="Your Name" class="border p-2 w-full mb-2">
+      <select id="topic" class="border p-2 w-full mb-4">
+        <option value="Finance">Finance</option>
+        <option value="Operations">Operations</option>
+        <option value="Data Analytics">Data Analytics</option>
+      </select>
+      <button onclick="startSession()" class="bg-blue-500 text-white px-4 py-2 rounded">Start Interview</button>
+    </div>
+    <div id="interview-screen" class="hidden">
+      <div id="intro" class="mb-4"></div>
+      <div id="timer" class="text-red-500 font-bold mb-4"></div>
+      <div id="question" class="font-bold mb-2"></div>
+      <textarea id="answer" class="border w-full h-24 p-2 mb-2" oncopy="return false" onpaste="return false" oncut="return false"></textarea>
+      <button id="submit-btn" onclick="submitAnswer()" class="bg-green-500 text-white px-4 py-2 rounded mr-2">Submit Answer</button>
+      <div id="loading" class="hidden text-gray-500 mt-2">Loading...</div>
+      <button id="next-btn" onclick="nextQuestion()" class="bg-blue-500 text-white px-4 py-2 rounded mt-4 hidden">Next Question</button>
+      <button id="finish-btn" onclick="getSummary()" class="bg-red-500 text-white px-4 py-2 rounded mt-4 hidden">Finish Interview</button>
+    </div>
+    <div id="summary-screen" class="hidden mt-4 p-4 bg-green-100 rounded"></div>
+  </div>
+  <script>
+    let sessionId;
+    let questions;
+    let currentIndex = 0;
+    let followups = [];
+    let currentFollowupIndex = 0;
+    let isFollowupMode = false;
+    let timerInterval;
+    let endTime;
+
+    async function startSession() {
+      const name = document.getElementById('name').value.trim();
+      const topic = document.getElementById('topic').value;
+      if (!name) return alert('Please enter your name');
+      const response = await fetch('/start-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, topic })
+      });
+      const data = await response.json();
+      if (data.error) return alert(data.error);
+      sessionId = data.sessionId;
+      questions = data.questions;
+      document.getElementById('start-screen').classList.add('hidden');
+      document.getElementById('interview-screen').classList.remove('hidden');
+      document.getElementById('intro').innerHTML = `Welcome, ${name}. I'm your AI interviewer for advanced Excel in ${topic}. You'll answer 10 questions within 30 minutes. Let's begin.`;
+      endTime = Date.now() + 30 * 60 * 1000;
+      timerInterval = setInterval(updateTimer, 1000);
+      updateTimer();
+      showQuestion();
+    }
+
+    function updateTimer() {
+      const now = Date.now();
+      const remaining = endTime - now;
+      if (remaining <= 0) {
+        clearInterval(timerInterval);
+        document.getElementById('timer').innerText = 'Time up!';
+        disableInputs();
+        const answer = document.getElementById('answer').value.trim();
+        if (answer) {
+          submitAnswer(true); // Submit any pending answer silently
+        } else {
+          getSummary();
+        }
+        return;
+      }
+      const minutes = Math.floor(remaining / 60000);
+      const seconds = Math.floor((remaining % 60000) / 1000);
+      document.getElementById('timer').innerText = `Time left: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    function disableInputs() {
+      document.getElementById('answer').disabled = true;
+      document.querySelectorAll('#interview-screen button').forEach(btn => btn.disabled = true);
+    }
+
+    function showQuestion() {
+      if (currentIndex >= questions.length) {
+        document.getElementById('finish-btn').classList.remove('hidden');
+        document.getElementById('question').innerHTML = '';
+        document.getElementById('answer').classList.add('hidden');
+        return;
+      }
+      let qText = `Question ${currentIndex + 1}: ${questions[currentIndex]}`;
+      if (isFollowupMode) {
+        qText = `Follow-up Question ${currentFollowupIndex + 1} for Question ${currentIndex + 1}: ${followups[currentFollowupIndex]}`;
+      }
+      document.getElementById('question').innerHTML = qText;
+      document.getElementById('answer').value = '';
+      document.getElementById('next-btn').classList.add('hidden');
+      document.getElementById('finish-btn').classList.add('hidden');
+      document.getElementById('answer').classList.remove('hidden');
+    }
+
+    async function submitAnswer(isTimeUp = false) {
+      const answer = document.getElementById('answer').value.trim();
+      if (!isTimeUp && !answer) return alert('Please provide an answer');
+      if (!isTimeUp) {
+        document.getElementById('submit-btn').disabled = true;
+        document.getElementById('loading').classList.remove('hidden');
+      }
+      const body = { sessionId, questionId: currentIndex, answer };
+      if (isFollowupMode) {
+        body.isFollowup = true;
+        body.followupIndex = currentFollowupIndex;
+      }
+      const response = await fetch('/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const data = await response.json();
+      if (!isTimeUp) {
+        document.getElementById('submit-btn').disabled = false;
+        document.getElementById('loading').classList.add('hidden');
+      }
+      if (data.error) {
+        if (!isTimeUp) alert(data.error);
+        if (data.error === 'Time up') {
+          disableInputs();
+          getSummary();
+        }
+        return;
+      }
+      if (!isFollowupMode && data.followups.length > 0) {
+        followups = data.followups;
+        currentFollowupIndex = 0;
+        isFollowupMode = true;
+        showQuestion();
+      } else if (isFollowupMode) {
+        currentFollowupIndex++;
+        if (currentFollowupIndex >= followups.length) {
+          isFollowupMode = false;
+          currentIndex++;
+          if (currentIndex >= questions.length) {
+            document.getElementById('finish-btn').classList.remove('hidden');
+            document.getElementById('answer').classList.add('hidden');
+          } else {
+            showQuestion();
+          }
+        } else {
+          showQuestion();
+        }
+      } else {
+        currentIndex++;
+        if (currentIndex >= questions.length) {
+          document.getElementById('finish-btn').classList.remove('hidden');
+          document.getElementById('answer').classList.add('hidden');
+        } else {
+          document.getElementById('next-btn').classList.remove('hidden');
+        }
+      }
+    }
+
+    function nextQuestion() {
+      showQuestion();
+    }
+
+    async function getSummary() {
+      clearInterval(timerInterval);
+      const response = await fetch('/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId })
+      });
+      const data = await response.json();
+      document.getElementById('interview-screen').classList.add('hidden');
+      document.getElementById('summary-screen').classList.remove('hidden');
+      document.getElementById('summary-screen').innerHTML = data.message;
+    }
+  </script>
+</body>
+</html>
