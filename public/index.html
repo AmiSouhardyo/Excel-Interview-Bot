@@ -55,7 +55,7 @@
       questions = data.questions;
       document.getElementById('start-screen').classList.add('hidden');
       document.getElementById('interview-screen').classList.remove('hidden');
-      document.getElementById('intro').innerHTML = `Welcome, ${name}. I'm your AI interviewer for advanced Excel in ${topic}. You'll answer 10 questions within 30 minutes. Let's begin.`;
+      document.getElementById('intro').innerHTML = `Welcome, ${name}. I'm your AI interviewer for Advanced Excel in ${topic}. You'll answer 10 questions within 30 minutes. Let's begin.`;
       endTime = Date.now() + 30 * 60 * 1000;
       timerInterval = setInterval(updateTimer, 1000);
       updateTimer();

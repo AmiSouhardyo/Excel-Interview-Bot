@@ -27,7 +27,18 @@ const sessions = {}; // in production use Firestore / Supabase
 const transcriptsFile = './transcripts.json';
 let transcripts = [];
 if (fs.existsSync(transcriptsFile)) {
-  transcripts = JSON.parse(fs.readFileSync(transcriptsFile, 'utf8'));
+  try {
+    const data = fs.readFileSync(transcriptsFile, 'utf8').trim();
+    if (data) {
+      transcripts = JSON.parse(data);
+    } else {
+      console.warn('transcripts.json is empty; initializing as empty array');
+      transcripts = [];
+    }
+  } catch (error) {
+    console.warn('Failed to parse transcripts.json; initializing as empty array:', error.message);
+    transcripts = [];
+  }
 }
 
 const prompt_generate_questions = (topic) => `Generate an array of 10 advanced Excel interview questions tailored to the ${topic} department. Return only the JSON array of 10 question strings.`;
@@ -200,7 +211,11 @@ app.post('/summary', async (req, res) => {
     };
   });
   transcripts.push(transcript);
-  fs.writeFileSync(transcriptsFile, JSON.stringify(transcripts, null, 2), 'utf8');
+  try {
+    fs.writeFileSync(transcriptsFile, JSON.stringify(transcripts, null, 2), 'utf8');
+  } catch (error) {
+    console.error('Failed to write transcripts.json:', error.message);
+  }
   delete sessions[sessionId];
   res.json({ ok: true, message: 'Thank you for taking the test and we\'ll contact you if you get selected.' });
 });
